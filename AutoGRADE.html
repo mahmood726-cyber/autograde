@@ -195,19 +195,19 @@ function saveOutcome() {
   o.name = document.getElementById('ocName').value;
   o.measure = document.getElementById('ocMeasure').value;
   o.design = document.getElementById('ocDesign').value;
-  o.estimate = parseFloat(document.getElementById('ocEstimate').value) || null;
-  o.ciLo = parseFloat(document.getElementById('ocCiLo').value) || null;
-  o.ciHi = parseFloat(document.getElementById('ocCiHi').value) || null;
-  o.pval = parseFloat(document.getElementById('ocPval').value) || null;
-  o.I2 = parseFloat(document.getElementById('ocI2').value) || null;
-  o.Q = parseFloat(document.getElementById('ocQ').value) || null;
-  o.Qp = parseFloat(document.getElementById('ocQp').value) || null;
-  o.tau2 = parseFloat(document.getElementById('ocTau2').value) || null;
+  o.estimate = (function(v){var p=parseFloat(v);return isFinite(p)?p:null;})(document.getElementById('ocEstimate').value);
+  o.ciLo = (function(v){var p=parseFloat(v);return isFinite(p)?p:null;})(document.getElementById('ocCiLo').value);
+  o.ciHi = (function(v){var p=parseFloat(v);return isFinite(p)?p:null;})(document.getElementById('ocCiHi').value);
+  o.pval = (function(v){var p=parseFloat(v);return isFinite(p)?p:null;})(document.getElementById('ocPval').value);
+  o.I2 = (function(v){var p=parseFloat(v);return isFinite(p)?p:null;})(document.getElementById('ocI2').value);
+  o.Q = (function(v){var p=parseFloat(v);return isFinite(p)?p:null;})(document.getElementById('ocQ').value);
+  o.Qp = (function(v){var p=parseFloat(v);return isFinite(p)?p:null;})(document.getElementById('ocQp').value);
+  o.tau2 = (function(v){var p=parseFloat(v);return isFinite(p)?p:null;})(document.getElementById('ocTau2').value);
   o.k = parseInt(document.getElementById('ocK').value) || null;
   o.N = parseInt(document.getElementById('ocN').value) || null;
-  o.cer = parseFloat(document.getElementById('ocCER').value) || null;
-  o.piLo = parseFloat(document.getElementById('ocPiLo').value) || null;
-  o.piHi = parseFloat(document.getElementById('ocPiHi').value) || null;
+  o.cer = (function(v){var p=parseFloat(v);return isFinite(p)?p:null;})(document.getElementById('ocCER').value);
+  o.piLo = (function(v){var p=parseFloat(v);return isFinite(p)?p:null;})(document.getElementById('ocPiLo').value);
+  o.piHi = (function(v){var p=parseFloat(v);return isFinite(p)?p:null;})(document.getElementById('ocPiHi').value);
   renderGradeDomains();
 }
 
@@ -387,7 +387,7 @@ function updateDomainLights() {
 function runAssessment() {
   for (let i = 0; i < outcomes.length; i++) {
     const o = outcomes[i];
-    if (!o.estimate) continue;
+    if (o.estimate == null) continue;
 
     const isRatio = ['HR','OR','RR'].includes(o.measure);
     const nullVal = isRatio ? 1.0 : 0.0;
@@ -418,7 +418,8 @@ function runAssessment() {
     /* Imprecision */
     let imprecLevel = 0, imprecReason = '';
     const ciNull = o.ciLo != null && o.ciHi != null && ((isRatio && o.ciLo < nullVal && o.ciHi > nullVal) || (!isRatio && o.ciLo < 0 && o.ciHi > 0));
-    if (ciNull) { imprecLevel = 1; imprecReason = 'CI crosses null'; }
+    if (ciNull && o.N && o.estimate) { const estAbs2 = Math.abs(isRatio ? Math.log(o.estimate) : o.estimate); const ois2 = estAbs2 > 0.01 ? Math.ceil(4 * Math.pow(1.96 + 0.842, 2) / (estAbs2 * estAbs2)) : 10000; imprecLevel = (o.N < ois2) ? 2 : 1; imprecReason = 'CI crosses null' + (o.N < ois2 ? ' AND N below OIS' : ''); }
+    else if (ciNull) { imprecLevel = 1; imprecReason = 'CI crosses null'; }
     else if (o.N && o.estimate) {
       const estAbs = Math.abs(isRatio ? Math.log(o.estimate) : o.estimate);
       const ois = estAbs > 0.01 ? Math.ceil(4 * Math.pow(1.96 + 0.842, 2) / (estAbs * estAbs)) : 10000;
@@ -444,7 +445,10 @@ function runAssessment() {
     let nnt = null;
     if (isRatio && o.cer && o.estimate < 1) {
       const cer = o.cer / 100;
-      const ard = cer * (1 - o.estimate);
+      let ard;
+      if (o.measure === 'RR') { ard = cer * (1 - o.estimate); }
+      else if (o.measure === 'OR') { const eer = (o.estimate * cer) / (1 - cer + o.estimate * cer); ard = cer - eer; }
+      else { ard = cer * (1 - o.estimate); } /* HR approximation */
       if (ard > 0) nnt = Math.round(1 / ard);
     }
 
@@ -550,7 +554,7 @@ function renderResults() {
     let controlRate = o.cer ? (o.cer / 100 * 1000).toFixed(0) + ' per 1000' : '\u2014';
     let interventionRate = '\u2014';
     if (o.cer && isRatio && est) {
-      const ir = (o.cer / 100 * est * 1000).toFixed(0);
+      const cer01 = o.cer / 100; const eer = o.measure === "OR" ? (est * cer01) / (1 - cer01 + est * cer01) : cer01 * est; const ir = (eer * 1000).toFixed(0);
       interventionRate = ir + ' per 1000';
     }
     const certBadge = o.grade.finalCertainty === 'HIGH' ? 'badge-green' : o.grade.finalCertainty === 'MODERATE' ? 'badge-amber' : 'badge-red';
